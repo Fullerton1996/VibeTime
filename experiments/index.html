@@ -17,17 +17,12 @@
 </head>
 <body>
 <div id="hint">hover to pour</div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js"></script>
-<script>
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x060201);
-scene.fog = new THREE.Fog(0x060201, 9, 22);
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.module.js';
+import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.134.0/examples/jsm/loaders/RGBELoader.js';
+import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.17.0/dist/lil-gui.esm.js';
 
-const cam = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, .1, 50);
-cam.position.set(0, 1.1, 7.5);
-cam.lookAt(0, .1, 0);
-
+// ── Renderer ─────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -35,10 +30,31 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.2;
 document.body.appendChild(renderer.domElement);
 
-// ── Lights ──────────────────────────────────────────────
+// ── Scene ─────────────────────────────────────────────────
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0402);
+scene.fog = new THREE.Fog(0x0a0402, 10, 24);
+
+const cam = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, .1, 50);
+cam.position.set(0, 1.1, 7.5);
+cam.lookAt(0, .1, 0);
+
+// ── HDRI ─────────────────────────────────────────────────
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+new RGBELoader().load(
+  'https://cdn.jsdelivr.net/npm/three@0.134.0/examples/textures/equirectangular/venice_sunset_1k.hdr',
+  tex => {
+    scene.environment = pmrem.fromEquirectangular(tex).texture;
+    tex.dispose();
+    pmrem.dispose();
+  }
+);
+
+// ── Lights ────────────────────────────────────────────────
 const ambient = new THREE.AmbientLight(0x2a1205, 2.2);
 scene.add(ambient);
 
@@ -57,19 +73,36 @@ const back = new THREE.DirectionalLight(0xffe080, .5);
 back.position.set(-1, 5, -6);
 scene.add(back);
 
-// ── Table ────────────────────────────────────────────────
-const tableMat = new THREE.MeshStandardMaterial({ color: 0x110705, roughness: .98 });
+// ── Table ─────────────────────────────────────────────────
+const tableMat = new THREE.MeshStandardMaterial({ color: 0x110705, roughness: .98, envMapIntensity: .4 });
 const table = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), tableMat);
 table.rotation.x = -Math.PI/2;
 table.position.y = -1.5;
 table.receiveShadow = true;
 scene.add(table);
 
-// ── Materials ────────────────────────────────────────────
-const ceram  = new THREE.MeshStandardMaterial({ color: 0xede5d2, roughness: .16, metalness: .02 });
-const cofMat = new THREE.MeshStandardMaterial({ color: 0x1c0a02, roughness: .55 });
+// ── Cup materials ─────────────────────────────────────────
+const ceram = new THREE.MeshStandardMaterial({
+  color: 0xede5d2, roughness: .15, metalness: .02, envMapIntensity: 1.5
+});
+const cofMat = new THREE.MeshStandardMaterial({
+  color: 0x1c0a02, roughness: .35, metalness: .15, envMapIntensity: 1.2
+});
 
-// ── Cup group ────────────────────────────────────────────
+// ── Liquid stream material ────────────────────────────────
+const liquidMat = new THREE.MeshPhysicalMaterial({
+  color: 0x3d1200,
+  roughness: 0.04,
+  metalness: 0.0,
+  transmission: 0.35,
+  thickness: 0.25,
+  ior: 1.333,
+  transparent: true,
+  opacity: 0.94,
+  envMapIntensity: 2.5,
+});
+
+// ── Cup group ─────────────────────────────────────────────
 const g = new THREE.Group();
 scene.add(g);
 
@@ -107,7 +140,7 @@ saucer.castShadow = true;
 saucer.receiveShadow = true;
 g.add(saucer);
 
-// ── Steam particles ──────────────────────────────────────
+// ── Steam ─────────────────────────────────────────────────
 const SC = 80;
 const sPos = new Float32Array(SC*3);
 const sMeta = Array.from({length:SC}, () => ({
@@ -119,67 +152,75 @@ sGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3));
 const sMat = new THREE.PointsMaterial({ color:0xffffff, size:.05, transparent:true, opacity:.12, sizeAttenuation:true });
 scene.add(new THREE.Points(sGeo, sMat));
 
-// ── Pour stream arc (continuous parabola of dense points) ─
-const ARC_N = 60;
-const arcPos = new Float32Array(ARC_N * 3);
-const arcGeo = new THREE.BufferGeometry();
-arcGeo.setAttribute('position', new THREE.BufferAttribute(arcPos, 3));
-const arcMat = new THREE.PointsMaterial({ color:0x7a3a10, size:.10, transparent:true, opacity:0, sizeAttenuation:true });
-scene.add(new THREE.Points(arcGeo, arcMat));
+// ── Stream tube (rebuilt each frame) ──────────────────────
+const TABLE_Y = -1.48;
+const RIM_LOCAL = new THREE.Vector3(0.58, 0.89, 0);
+let streamMesh = null;
 
-// ── Pour splash particles (scatter at landing) ────────────
-const PC = 300;
+function buildStream(rw, pour) {
+  // Parabolic arc: y = rw.y - k*t², x = rw.x + 1.8*frac
+  const k = 2.8;
+  const t_hit = Math.sqrt(Math.max(0.01, (rw.y - TABLE_Y) / k));
+  const N = 18;
+  const curvePts = [];
+  for (let i = 0; i <= N; i++) {
+    const frac = i / N;
+    const t = frac * t_hit;
+    curvePts.push(new THREE.Vector3(
+      rw.x + 1.8 * frac,
+      Math.max(TABLE_Y + .02, rw.y - k * t * t),
+      rw.z
+    ));
+  }
+  if (streamMesh) { streamMesh.geometry.dispose(); scene.remove(streamMesh); }
+  const radius = 0.025 + pour * 0.025;
+  const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curvePts), 32, radius, 10, false);
+  streamMesh = new THREE.Mesh(geo, liquidMat);
+  streamMesh.castShadow = true;
+  scene.add(streamMesh);
+  return { lx: rw.x + 1.8, lz: rw.z };
+}
+
+// ── Splash particles ──────────────────────────────────────
+const PC = 200;
 const pPos = new Float32Array(PC*3);
 const pVel = Array.from({length:PC}, () => ({x:0,y:0,z:0}));
 const pLife = new Float32Array(PC);
 const pGeo = new THREE.BufferGeometry();
 pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-const pMat = new THREE.PointsMaterial({ color:0x7a3a10, size:.08, transparent:true, opacity:0, sizeAttenuation:true });
+const pMat = new THREE.PointsMaterial({ color:0x6b2e0a, size:.07, transparent:true, opacity:0, sizeAttenuation:true });
 scene.add(new THREE.Points(pGeo, pMat));
 for (let i=0;i<PC;i++) pPos[i*3+1]=-50;
 
-// ── Puddle ───────────────────────────────────────────────
-const puddleMat = new THREE.MeshStandardMaterial({ color:0x1c0a02, roughness:.8, transparent:true, opacity:0 });
-const puddle = new THREE.Mesh(new THREE.CircleGeometry(1, 32), puddleMat);
-puddle.rotation.x = -Math.PI/2;
-puddle.position.y = -1.48;
-scene.add(puddle);
-
-// Pour origin in cup local-space (right rim, lowest point when tilted)
-const RIM_LOCAL = new THREE.Vector3(0.58, 0.89, 0);
-const TABLE_Y = -1.48;
-
-function rimWorld() {
-  return RIM_LOCAL.clone().applyMatrix4(g.matrixWorld);
-}
-
-// Parabolic arc end-point: how far right the stream lands
-function arcLand(rw) {
-  // y(t) = rw.y - 2.8*t²  →  t_hit = sqrt((rw.y - TABLE_Y) / 2.8)
-  const k = 2.8;
-  const t_hit = Math.sqrt(Math.max(0, (rw.y - TABLE_Y) / k));
-  return { k, t_hit, lx: rw.x + 1.8 * t_hit, lz: rw.z };
-}
-
 function spawnSplash(i, lx, lz) {
-  pPos[i*3]   = lx + (Math.random()-.5)*.25;
+  pPos[i*3]   = lx + (Math.random()-.5)*.3;
   pPos[i*3+1] = TABLE_Y + .02;
-  pPos[i*3+2] = lz + (Math.random()-.5)*.25;
+  pPos[i*3+2] = lz + (Math.random()-.5)*.3;
   pVel[i] = {
-    x: (Math.random()-.5)*.03,
-    y:  .02 + Math.random()*.04,
-    z: (Math.random()-.5)*.03,
+    x: (Math.random()-.5)*.04,
+    y:  .02 + Math.random()*.05,
+    z: (Math.random()-.5)*.04,
   };
   pLife[i] = 0;
 }
 
-// ── GUI ──────────────────────────────────────────────────
+// ── Puddle ────────────────────────────────────────────────
+const puddleMat = new THREE.MeshStandardMaterial({
+  color: 0x1c0a02, roughness:.25, metalness:.1,
+  transparent:true, opacity:0, envMapIntensity:1.5
+});
+const puddle = new THREE.Mesh(new THREE.CircleGeometry(1, 48), puddleMat);
+puddle.rotation.x = -Math.PI/2;
+puddle.position.y = TABLE_Y + .005;
+scene.add(puddle);
+
+// ── GUI ───────────────────────────────────────────────────
 const cfg = {
   cupColor:         '#ede5d2',
-  cupRoughness:     0.16,
+  cupRoughness:     0.15,
   cupMetalness:     0.02,
   coffeeColor:      '#1c0a02',
-  bgColor:          '#060201',
+  bgColor:          '#0a0402',
   tableColor:       '#110705',
   ambientColor:     '#2a1205',
   ambientIntensity: 2.2,
@@ -189,43 +230,46 @@ const cfg = {
   fillIntensity:    0.5,
   backColor:        '#ffe080',
   backIntensity:    0.5,
-  exposure:         1.15,
+  exposure:         1.2,
   steamColor:       '#ffffff',
   steamSize:        0.05,
-  pourColor:        '#7a3a10',
-  pourSize:         0.09,
+  liquidColor:      '#3d1200',
+  liquidOpacity:    0.94,
+  liquidRoughness:  0.04,
 };
 
-const gui = new dat.GUI({ width: 260 });
+const gui = new GUI({ title: 'Controls', width: 250 });
 const colF = gui.addFolder('Colours');
-colF.addColor(cfg, 'cupColor')           .name('Cup')            .onChange(v => ceram.color.set(v));
-colF.add(cfg, 'cupRoughness', 0, 1, .01) .name('Cup roughness')  .onChange(v => ceram.roughness = v);
-colF.add(cfg, 'cupMetalness', 0, 1, .01) .name('Cup metalness')  .onChange(v => ceram.metalness = v);
-colF.addColor(cfg, 'coffeeColor')        .name('Coffee')         .onChange(v => { cofMat.color.set(v); puddleMat.color.set(v); });
-colF.addColor(cfg, 'bgColor')            .name('Background')     .onChange(v => { scene.background.set(v); scene.fog.color.set(v); });
-colF.addColor(cfg, 'tableColor')         .name('Table')          .onChange(v => tableMat.color.set(v));
+colF.addColor(cfg, 'cupColor')           .name('Cup')           .onChange(v => ceram.color.set(v));
+colF.add(cfg, 'cupRoughness', 0, 1, .01) .name('Cup roughness') .onChange(v => ceram.roughness = v);
+colF.add(cfg, 'cupMetalness', 0, 1, .01) .name('Cup metalness') .onChange(v => ceram.metalness = v);
+colF.addColor(cfg, 'coffeeColor')        .name('Coffee')        .onChange(v => { cofMat.color.set(v); puddleMat.color.set(v); });
+colF.addColor(cfg, 'bgColor')            .name('Background')    .onChange(v => { scene.background.set(v); scene.fog.color.set(v); });
+colF.addColor(cfg, 'tableColor')         .name('Table')         .onChange(v => tableMat.color.set(v));
 
 const litF = gui.addFolder('Lighting');
-litF.addColor(cfg, 'ambientColor')             .name('Ambient colour')   .onChange(v => ambient.color.set(v));
-litF.add(cfg, 'ambientIntensity', 0, 6, .1)   .name('Ambient intensity').onChange(v => ambient.intensity = v);
-litF.addColor(cfg, 'keyColor')                 .name('Key colour')       .onChange(v => spot.color.set(v));
-litF.add(cfg, 'keyIntensity', 0, 12, .1)       .name('Key intensity');
-litF.addColor(cfg, 'fillColor')                .name('Fill colour')      .onChange(v => fill.color.set(v));
-litF.add(cfg, 'fillIntensity', 0, 4, .05)      .name('Fill intensity')   .onChange(v => fill.intensity = v);
-litF.addColor(cfg, 'backColor')                .name('Back colour')      .onChange(v => back.color.set(v));
-litF.add(cfg, 'backIntensity', 0, 4, .05)      .name('Back intensity')   .onChange(v => back.intensity = v);
-litF.add(cfg, 'exposure', 0.2, 3, .05)         .name('Exposure')         .onChange(v => renderer.toneMappingExposure = v);
+litF.addColor(cfg, 'ambientColor')           .name('Ambient colour')   .onChange(v => ambient.color.set(v));
+litF.add(cfg, 'ambientIntensity', 0, 6, .1)  .name('Ambient intensity').onChange(v => ambient.intensity = v);
+litF.addColor(cfg, 'keyColor')               .name('Key colour')       .onChange(v => spot.color.set(v));
+litF.add(cfg, 'keyIntensity', 0, 12, .1)     .name('Key intensity');
+litF.addColor(cfg, 'fillColor')              .name('Fill colour')      .onChange(v => fill.color.set(v));
+litF.add(cfg, 'fillIntensity', 0, 4, .05)    .name('Fill intensity')   .onChange(v => fill.intensity = v);
+litF.addColor(cfg, 'backColor')              .name('Back colour')      .onChange(v => back.color.set(v));
+litF.add(cfg, 'backIntensity', 0, 4, .05)    .name('Back intensity')   .onChange(v => back.intensity = v);
+litF.add(cfg, 'exposure', 0.2, 3, .05)       .name('Exposure')         .onChange(v => renderer.toneMappingExposure = v);
 
-const parF = gui.addFolder('Particles');
-parF.addColor(cfg, 'steamColor').name('Steam colour').onChange(v => sMat.color.set(v));
-parF.add(cfg, 'steamSize', 0.01, 0.3, .005).name('Steam size').onChange(v => sMat.size = v);
-parF.addColor(cfg, 'pourColor') .name('Pour colour') .onChange(v => { arcMat.color.set(v); pMat.color.set(v); });
-parF.add(cfg, 'pourSize', 0.01, 0.3, .005) .name('Pour size') .onChange(v => { arcMat.size = v*1.2; pMat.size = v; });
+const liqF = gui.addFolder('Liquid');
+liqF.addColor(cfg, 'liquidColor')            .name('Colour')           .onChange(v => { liquidMat.color.set(v); pMat.color.set(v); });
+liqF.add(cfg, 'liquidOpacity', 0.1, 1, .01) .name('Opacity')          .onChange(v => liquidMat.opacity = v);
+liqF.add(cfg, 'liquidRoughness', 0, 1, .01) .name('Roughness')        .onChange(v => liquidMat.roughness = v);
 
-litF.close();
-parF.close();
+const parF = gui.addFolder('Steam');
+parF.addColor(cfg, 'steamColor').name('Colour').onChange(v => sMat.color.set(v));
+parF.add(cfg, 'steamSize', 0.01, 0.3, .005).name('Size').onChange(v => sMat.size = v);
 
-// ── Interaction ──────────────────────────────────────────
+litF.close(); liqF.close(); parF.close();
+
+// ── Interaction ───────────────────────────────────────────
 let hover=false, tilt=0, pour=0, T=0;
 const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
 
@@ -237,7 +281,7 @@ window.addEventListener('mousemove', e => {
   if (hover&&!was) document.getElementById('hint').classList.add('gone');
 });
 
-// ── Render loop ──────────────────────────────────────────
+// ── Render loop ───────────────────────────────────────────
 (function tick() {
   requestAnimationFrame(tick);
   T+=.01;
@@ -249,10 +293,9 @@ window.addEventListener('mousemove', e => {
   g.rotation.z = tilt;
 
   pour = Math.max(0, Math.min(1, pour + (hover ? 1 : -3) * .022));
-
   g.updateMatrixWorld(true);
 
-  // Steam — fades out as cup tilts
+  // Steam
   sMat.opacity = .12 * Math.max(0, 1 - pour*3);
   for (let i=0;i<SC;i++) {
     const s=sMeta[i];
@@ -265,61 +308,47 @@ window.addEventListener('mousemove', e => {
   }
   sGeo.attributes.position.needsUpdate=true;
 
-  // Pour stream arc + splash
+  // Liquid stream + splash
   if (pour > 0.15) {
-    const rw = rimWorld();
-    const { k, t_hit, lx, lz } = arcLand(rw);
+    const rw = RIM_LOCAL.clone().applyMatrix4(g.matrixWorld);
+    const { lx, lz } = buildStream(rw, pour);
 
-    // Continuous arc — dense points along the parabola
-    for (let i=0; i<ARC_N; i++) {
-      const frac = i / (ARC_N-1);           // 0→1
-      const t    = frac * t_hit;
-      arcPos[i*3]   = rw.x + 1.8 * frac;   // horizontal: rim.x → rim.x+1.8
-      arcPos[i*3+1] = Math.max(TABLE_Y, rw.y - k * t * t);
-      arcPos[i*3+2] = rw.z;
-    }
-    arcGeo.attributes.position.needsUpdate = true;
-    arcMat.opacity = Math.min((pour - 0.15) * 3, 1) * 0.9;
-
-    // Puddle grows at landing spot
-    puddleMat.opacity = Math.min((pour - 0.15) * 2, 0.75);
-    const ps = Math.min(pour * 0.7, 0.55);
+    // Puddle
+    puddleMat.opacity = Math.min((pour-.15)*2, 0.82);
+    const ps = Math.min(pour*.65, .5);
     puddle.scale.set(ps, ps, ps);
     puddle.position.x = lx;
     puddle.position.z = lz;
 
-    // Splash particles scatter from landing spot
-    pMat.opacity = Math.min((pour - 0.2) * 3, 0.8);
-    const active = Math.floor(pour * PC * .5);
-    for (let i=0; i<PC; i++) {
-      if (i < active) {
-        pLife[i] += .025;
-        if (pLife[i] > 1 || pPos[i*3+1] < TABLE_Y - .1) {
-          spawnSplash(i, lx, lz);
-        } else {
-          pPos[i*3]   += pVel[i].x;
-          pPos[i*3+1] += pVel[i].y;
-          pVel[i].y   -= .006;            // gravity
-          pPos[i*3+2] += pVel[i].z;
+    // Splash
+    pMat.opacity = Math.min((pour-.2)*3, .75);
+    const active = Math.floor(pour*PC*.5);
+    for (let i=0;i<PC;i++) {
+      if (i<active) {
+        pLife[i]+=.025;
+        if (pLife[i]>1||pPos[i*3+1]<TABLE_Y-.05) spawnSplash(i, lx, lz);
+        else {
+          pPos[i*3]  +=pVel[i].x;
+          pPos[i*3+1]+=pVel[i].y;
+          pVel[i].y  -=.005;
+          pPos[i*3+2]+=pVel[i].z;
         }
-      } else {
-        pPos[i*3+1] = -50;
-      }
+      } else pPos[i*3+1]=-50;
     }
   } else {
-    arcMat.opacity  = 0;
-    pMat.opacity    = 0;
-    puddleMat.opacity = 0;
-    for (let i=0; i<PC; i++) pPos[i*3+1] = -50;
+    if (streamMesh) { streamMesh.geometry.dispose(); scene.remove(streamMesh); streamMesh=null; }
+    puddleMat.opacity=0;
+    pMat.opacity=0;
+    for (let i=0;i<PC;i++) pPos[i*3+1]=-50;
   }
-  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.position.needsUpdate=true;
 
   spot.intensity = cfg.keyIntensity + Math.sin(T*.65)*.4;
   renderer.render(scene, cam);
 })();
 
 window.addEventListener('resize', () => {
-  cam.aspect = innerWidth/innerHeight;
+  cam.aspect=innerWidth/innerHeight;
   cam.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });

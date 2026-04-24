@@ -18,6 +18,7 @@
 <body>
 <div id="hint">hover to pour</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js"></script>
 <script>
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x060201);
@@ -38,9 +39,10 @@ renderer.toneMappingExposure = 1.15;
 document.body.appendChild(renderer.domElement);
 
 // ── Lights ──────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0x2a1205, 2.2));
+const ambient = new THREE.AmbientLight(0x2a1205, 2.2);
+scene.add(ambient);
 
-const spot = new THREE.SpotLight(0xffa050, 4.5, 28, .5, .65, 1.5);
+const spot = new THREE.SpotLight(0xffa050, 4.2, 28, .5, .65, 1.5);
 spot.position.set(3, 9, 5);
 spot.castShadow = true;
 spot.shadow.bias = -0.001;
@@ -56,24 +58,21 @@ back.position.set(-1, 5, -6);
 scene.add(back);
 
 // ── Table ────────────────────────────────────────────────
-const table = new THREE.Mesh(
-  new THREE.PlaneGeometry(30, 30),
-  new THREE.MeshStandardMaterial({ color: 0x110705, roughness: .98 })
-);
+const tableMat = new THREE.MeshStandardMaterial({ color: 0x110705, roughness: .98 });
+const table = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), tableMat);
 table.rotation.x = -Math.PI/2;
 table.position.y = -1.5;
 table.receiveShadow = true;
 scene.add(table);
 
 // ── Materials ────────────────────────────────────────────
-const ceram = new THREE.MeshStandardMaterial({ color: 0xede5d2, roughness: .16, metalness: .02 });
+const ceram  = new THREE.MeshStandardMaterial({ color: 0xede5d2, roughness: .16, metalness: .02 });
 const cofMat = new THREE.MeshStandardMaterial({ color: 0x1c0a02, roughness: .55 });
 
 // ── Cup group ────────────────────────────────────────────
 const g = new THREE.Group();
 scene.add(g);
 
-// Cup lathe: traces outer wall → rim → inner wall → closes at bottom center
 const pts = [
   [.00,-.90],[.38,-.90],[.44,-.87],[.56,-.81],
   [.50,-.26],[.57, .22],[.63, .70],[.67, .86],
@@ -85,24 +84,20 @@ const cup = new THREE.Mesh(new THREE.LatheGeometry(pts, 64), ceram);
 cup.castShadow = true;
 g.add(cup);
 
-// Coffee surface disc sitting inside the cup
 const cofDisk = new THREE.Mesh(new THREE.CircleGeometry(.48, 48), cofMat);
 cofDisk.rotation.x = -Math.PI/2;
 cofDisk.position.y = .75;
 g.add(cofDisk);
 
-// Handle — tube along a Catmull-Rom curve
 const hPts = [
-  [.63, .38,0],[1.04,.35,0],[1.17,.09,0],[1.17,-.16,0],[1.04,-.38,0],[.63,-.40,0]
+  [.63,.38,0],[1.04,.35,0],[1.17,.09,0],[1.17,-.16,0],[1.04,-.38,0],[.63,-.40,0]
 ].map(([x,y,z]) => new THREE.Vector3(x,y,z));
 const handle = new THREE.Mesh(
-  new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hPts), 24, .055, 10, false),
-  ceram
+  new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hPts), 24, .055, 10, false), ceram
 );
 handle.castShadow = true;
 g.add(handle);
 
-// Saucer lathe
 const sPts = [
   [.00,-1.08],[.35,-1.10],[.55,-1.14],[.80,-1.11],[1.00,-1.04],
   [1.12,-.98],[1.14,-.94],[1.10,-.90],[.70,-.88],[.50,-.90],[.00,-.92]
@@ -116,17 +111,12 @@ g.add(saucer);
 const SC = 80;
 const sPos = new Float32Array(SC*3);
 const sMeta = Array.from({length:SC}, () => ({
-  life: Math.random(),
-  speed: .004+Math.random()*.006,
-  ox: (Math.random()-.5)*.35,
-  wob: .3+Math.random()*.7,
-  phase: Math.random()*Math.PI*2
+  life: Math.random(), speed: .004+Math.random()*.006,
+  ox: (Math.random()-.5)*.35, wob: .3+Math.random()*.7, phase: Math.random()*Math.PI*2
 }));
 const sGeo = new THREE.BufferGeometry();
 sGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3));
-const sMat = new THREE.PointsMaterial({
-  color:0xffffff, size:.05, transparent:true, opacity:.12, sizeAttenuation:true
-});
+const sMat = new THREE.PointsMaterial({ color:0xffffff, size:.05, transparent:true, opacity:.12, sizeAttenuation:true });
 scene.add(new THREE.Points(sGeo, sMat));
 
 // ── Pour particles ───────────────────────────────────────
@@ -136,25 +126,74 @@ const pVel = Array.from({length:PC}, () => ({x:0,y:0,z:0}));
 const pLife = new Float32Array(PC);
 const pGeo = new THREE.BufferGeometry();
 pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-const pMat = new THREE.PointsMaterial({
-  color:0x281000, size:.07, transparent:true, opacity:0, sizeAttenuation:true
-});
+const pMat = new THREE.PointsMaterial({ color:0x281000, size:.07, transparent:true, opacity:0, sizeAttenuation:true });
 scene.add(new THREE.Points(pGeo, pMat));
 for (let i=0;i<PC;i++) pPos[i*3+1]=-50;
 
-// Spawn a pour particle at the world-space position of the low rim
 function spawnP(i) {
   const o = new THREE.Vector3(.58,.89,0).applyMatrix4(g.matrixWorld);
   pPos[i*3]   = o.x+(Math.random()-.5)*.05;
   pPos[i*3+1] = o.y+(Math.random()-.5)*.04;
   pPos[i*3+2] = o.z+(Math.random()-.5)*.04;
-  pVel[i] = {
-    x:  .012+Math.random()*.013,
-    y:  .005-Math.random()*.022,
-    z: (Math.random()-.5)*.006
-  };
+  pVel[i] = { x:.012+Math.random()*.013, y:.005-Math.random()*.022, z:(Math.random()-.5)*.006 };
   pLife[i] = 0;
 }
+
+// ── GUI ──────────────────────────────────────────────────
+const cfg = {
+  // Colours
+  cupColor:         '#ede5d2',
+  cupRoughness:     0.16,
+  cupMetalness:     0.02,
+  coffeeColor:      '#1c0a02',
+  bgColor:          '#060201',
+  tableColor:       '#110705',
+  // Lighting
+  ambientColor:     '#2a1205',
+  ambientIntensity: 2.2,
+  keyColor:         '#ffa050',
+  keyIntensity:     4.2,
+  fillColor:        '#1030a0',
+  fillIntensity:    0.5,
+  backColor:        '#ffe080',
+  backIntensity:    0.5,
+  exposure:         1.15,
+  // Particles
+  steamColor:       '#ffffff',
+  steamSize:        0.05,
+  pourColor:        '#281000',
+  pourSize:         0.07,
+};
+
+const gui = new dat.GUI({ width: 260 });
+
+const colF = gui.addFolder('Colours');
+colF.addColor(cfg, 'cupColor')    .name('Cup')             .onChange(v => ceram.color.set(v));
+colF.add(cfg, 'cupRoughness', 0, 1, .01).name('Cup roughness').onChange(v => ceram.roughness = v);
+colF.add(cfg, 'cupMetalness', 0, 1, .01).name('Cup metalness').onChange(v => ceram.metalness = v);
+colF.addColor(cfg, 'coffeeColor') .name('Coffee')          .onChange(v => { cofMat.color.set(v); pMat.color.set(v); });
+colF.addColor(cfg, 'bgColor')     .name('Background')      .onChange(v => { scene.background.set(v); scene.fog.color.set(v); });
+colF.addColor(cfg, 'tableColor')  .name('Table')           .onChange(v => tableMat.color.set(v));
+
+const litF = gui.addFolder('Lighting');
+litF.addColor(cfg, 'ambientColor')    .name('Ambient colour')   .onChange(v => ambient.color.set(v));
+litF.add(cfg, 'ambientIntensity', 0, 6, .1).name('Ambient intensity').onChange(v => ambient.intensity = v);
+litF.addColor(cfg, 'keyColor')        .name('Key colour')       .onChange(v => spot.color.set(v));
+litF.add(cfg, 'keyIntensity', 0, 12, .1)  .name('Key intensity');
+litF.addColor(cfg, 'fillColor')       .name('Fill colour')      .onChange(v => fill.color.set(v));
+litF.add(cfg, 'fillIntensity', 0, 4, .05) .name('Fill intensity').onChange(v => fill.intensity = v);
+litF.addColor(cfg, 'backColor')       .name('Back colour')      .onChange(v => back.color.set(v));
+litF.add(cfg, 'backIntensity', 0, 4, .05) .name('Back intensity').onChange(v => back.intensity = v);
+litF.add(cfg, 'exposure', 0.2, 3, .05)   .name('Exposure')      .onChange(v => renderer.toneMappingExposure = v);
+
+const parF = gui.addFolder('Particles');
+parF.addColor(cfg, 'steamColor').name('Steam colour').onChange(v => sMat.color.set(v));
+parF.add(cfg, 'steamSize', 0.01, 0.3, .005).name('Steam size').onChange(v => sMat.size = v);
+parF.addColor(cfg, 'pourColor').name('Pour colour') .onChange(v => pMat.color.set(v));
+parF.add(cfg, 'pourSize', 0.01, 0.3, .005) .name('Pour size') .onChange(v => pMat.size = v);
+
+litF.close();
+parF.close();
 
 // ── Interaction ──────────────────────────────────────────
 let hover=false, tilt=0, pour=0, T=0;
@@ -176,15 +215,14 @@ window.addEventListener('mousemove', e => {
   g.position.y=Math.sin(T*.55)*.04;
   if (!hover&&pour<.05) g.rotation.y+=.003;
 
-  tilt+=(( hover?-Math.PI*.38:0)-tilt)*.045;
+  tilt+=((hover?-Math.PI*.38:0)-tilt)*.045;
   g.rotation.z=tilt;
 
   pour=Math.max(0,Math.min(1, pour+(hover?1:-3)*.022));
 
-  // Must update world matrix after transforms, before particle world-space queries
   g.updateMatrixWorld(true);
 
-  // Steam — fade out when pouring
+  // Steam
   sMat.opacity=.12*Math.max(0, 1-pour*3);
   for (let i=0;i<SC;i++) {
     const s=sMeta[i];
@@ -219,7 +257,9 @@ window.addEventListener('mousemove', e => {
   }
   pGeo.attributes.position.needsUpdate=true;
 
-  spot.intensity=4.2+Math.sin(T*.65)*.4;
+  // Key light pulses around the GUI-set base intensity
+  spot.intensity=cfg.keyIntensity+Math.sin(T*.65)*.4;
+
   renderer.render(scene, cam);
 })();
 

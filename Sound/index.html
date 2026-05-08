@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Playground</title>
+  <title>Playground — Draft 3</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -60,7 +60,6 @@
     }
 
     .ctrl:hover { opacity: 0.45; }
-
     #btn-bpm { cursor: ew-resize; }
 
     .grid-wrap {
@@ -74,52 +73,62 @@
       width: 100%;
       display: flex;
       flex-direction: column;
-      gap: clamp(7px, 1.05vw, 14px);
+      gap: clamp(6px, 0.9vw, 12px);
+    }
+
+    .row-wrap {
+      display: flex;
+      align-items: center;
     }
 
     .row {
+      flex: 1;
       display: grid;
       grid-template-columns: repeat(16, 1fr);
-      gap: clamp(7px, 0.95vw, 13px);
+      gap: clamp(6px, 0.85vw, 12px);
     }
 
     .dot {
       aspect-ratio: 1;
       border-radius: 50%;
-      background: #000;
+      background: #CCCCCC;
       cursor: pointer;
       transition: transform 0.07s ease;
       will-change: transform;
     }
 
     .dot:hover:not(.active) {
-      background: #1c1c1c;
-      transform: scale(1.04);
+      background: #BBBBBB;
     }
 
     .dot.active:hover {
-      transform: scale(1.04);
       filter: brightness(1.12);
     }
 
     .dot.beat {
-      transform: scale(1.09);
-      filter: brightness(1.15);
-      transition: transform 0.04s ease, filter 0.04s ease;
+      filter: brightness(1.2);
+      transition: filter 0.04s ease;
     }
 
     .dot.col-active:not(.active) {
-      background: #111;
+      background: #C0C0C0;
     }
 
-    /* Playhead bar above grid */
+    .grid { user-select: none; }
+
     .playhead-wrap {
-      width: 100%;
+      flex: 1;
       display: grid;
       grid-template-columns: repeat(16, 1fr);
-      gap: clamp(7px, 0.95vw, 13px);
+      gap: clamp(6px, 0.85vw, 12px);
       margin-bottom: 6px;
       flex-shrink: 0;
+    }
+
+    .playhead-row {
+      display: flex;
+      align-items: center;
+      gap: 20px;
     }
 
     .ph-cell {
@@ -129,9 +138,7 @@
       transition: background 0.06s ease;
     }
 
-    .ph-cell.active {
-      background: #000;
-    }
+    .ph-cell.active { background: #000; }
   </style>
 </head>
 
@@ -140,348 +147,513 @@
     <h1 class="title">Playground</h1>
     <nav class="controls">
       <button class="ctrl" id="btn-sound">Sound • On</button>
-      <button class="ctrl" id="btn-bpm">BPM • 124</button>
+      <button class="ctrl" id="btn-bpm">BPM • 90</button>
       <button class="ctrl" id="btn-play">Play</button>
+      <button class="ctrl" id="btn-randomise">Randomise</button>
       <button class="ctrl" id="btn-clear">Clear</button>
     </nav>
   </header>
 
   <div class="grid-wrap">
     <div style="width:100%">
-      <div class="playhead-wrap" id="playhead"></div>
-      <div class="grid" id="grid"></div>
+<div class="grid" id="grid"></div>
     </div>
   </div>
 
 <script>
-// ─── TRACK DEFINITIONS ──────────────────────────────────────────────────────
+// ─── TRACKS ─────────────────────────────────────────────────────────────────
 
 const STEPS = 16;
 
 const TRACKS = [
   {
-    id: 'kick',
-    gradient: 'radial-gradient(circle at 50% 50%, #FF3080 0%, #FF0055 22%, #CC0044 48%, #330011 76%, #000 100%)',
-    steps: [false,false,false,false,true,false,false,false,false,false,false,false,false,false,false,false],
+    id: 'drone',     label: 'Drone',
+    gradient: 'radial-gradient(circle at 50% 50%, #FF8800 0%, #FF2200 100%)',
+    steps: [false,false,false,false,false,true,false,false,false,false,true,false,false,false,false,false],
   },
   {
-    id: 'snare',
-    gradient: 'radial-gradient(circle at 50% 50%, #DDFF00 0%, #AAFF00 22%, #66CC00 50%, #182200 78%, #000 100%)',
-    steps: [false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,false],
+    id: 'pad',       label: 'Pad',
+    gradient: 'radial-gradient(circle at 50% 50%, #AA44FF 0%, #4400CC 100%)',
+    steps: [false,false,false,false,false,true,false,false,false,false,true,false,false,false,false,false],
   },
   {
-    id: 'clap',
-    gradient: 'radial-gradient(circle at 50% 50%, #5599FF 0%, #3366FF 22%, #1144DD 50%, #001130 78%, #000 100%)',
-    steps: [false,false,false,false,false,false,false,false,false,true,false,false,false,false,false,false],
+    id: 'lead',      label: 'Lead',
+    gradient: 'radial-gradient(circle at 50% 50%, #FF00BB 0%, #8800FF 100%)',
+    steps: [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
   },
   {
-    id: 'hh_closed',
-    gradient: 'radial-gradient(circle at 50% 50%, #FF9944 0%, #FF6622 22%, #CC3300 50%, #221000 78%, #000 100%)',
-    steps: [true,false,true,false,true,false,true,false,true,false,true,false,true,false,true,false],
+    id: 'bell',      label: 'Bell',
+    gradient: 'radial-gradient(circle at 50% 50%, #00DDFF 0%, #0044FF 100%)',
+    steps: [false,false,false,false,true,false,false,false,false,false,false,true,false,false,false,false],
   },
   {
-    id: 'hh_open',
-    gradient: 'radial-gradient(circle at 50% 50%, #FF44BB 0%, #FF22AA 22%, #CC0088 50%, #220018 78%, #000 100%)',
-    steps: [false,false,false,true,false,false,false,true,false,false,false,true,false,false,false,false],
+    id: 'texture',   label: 'Texture',
+    gradient: 'radial-gradient(circle at 50% 50%, #AAFF00 0%, #00AA44 100%)',
+    steps: [false,false,false,false,false,true,false,false,false,false,true,false,false,false,false,false],
   },
   {
-    id: 'tom',
-    gradient: 'radial-gradient(circle at 50% 50%, #9944FF 0%, #7722EE 22%, #5500CC 50%, #110028 78%, #000 100%)',
-    steps: [false,false,false,false,false,false,false,false,false,false,true,false,false,false,false,false],
-  },
-  {
-    id: 'bass',
-    gradient: 'radial-gradient(circle at 50% 50%, #00FFCC 0%, #00DDAA 22%, #009966 50%, #001A12 78%, #000 100%)',
-    steps: [true,false,false,true,false,false,true,false,false,false,true,false,false,true,false,false],
+    id: 'shimmer',   label: 'Shimmer',
+    gradient: 'radial-gradient(circle at 50% 50%, #FFCC00 0%, #FF4400 100%)',
+    steps: [false,false,false,false,false,false,true,true,true,true,false,false,false,false,false,false],
   },
 ];
 
 // ─── STATE ──────────────────────────────────────────────────────────────────
 
-let bpm = 124;
+let bpm = 90;
 let isPlaying = false;
 let soundEnabled = true;
 let currentStep = 0;
 let schedulerHandle = null;
 let nextNoteTime = 0;
 let audioCtx = null;
-let openHHNode = null; // to cut open HH when closed HH fires
+
+let masterGainNode = null;
+let hallReverb = null;
+let hallWet = null;
+let roomReverb = null;
+let roomWet = null;
+let delayNode = null;
+let delayFeedback = null;
 
 // ─── AUDIO CONTEXT ──────────────────────────────────────────────────────────
 
-function ctx() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
+function ac() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === 'suspended') audioCtx.resume();
   return audioCtx;
 }
 
-// Shared master gain (for sound on/off fade)
-let masterGain = null;
-function master() {
-  if (!masterGain) {
-    masterGain = ctx().createGain();
-    masterGain.connect(ctx().destination);
+function mg() {
+  if (!masterGainNode) {
+    masterGainNode = ac().createGain();
+    masterGainNode.connect(ac().destination);
   }
-  return masterGain;
+  return masterGainNode;
 }
 
 // ─── NOISE BUFFER ───────────────────────────────────────────────────────────
 
-let noiseBuffer = null;
-function getNoiseBuffer() {
-  if (noiseBuffer) return noiseBuffer;
-  const ac = ctx();
-  const len = ac.sampleRate * 2;
-  noiseBuffer = ac.createBuffer(1, len, ac.sampleRate);
-  const d = noiseBuffer.getChannelData(0);
+let noiseBuf = null;
+function getNoise() {
+  if (noiseBuf) return noiseBuf;
+  const ctx = ac();
+  const len = ctx.sampleRate * 3;
+  noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-  return noiseBuffer;
+  return noiseBuf;
 }
 
-// ─── INSTRUMENTS ────────────────────────────────────────────────────────────
+// ─── REVERB BUILDER ─────────────────────────────────────────────────────────
 
-function playKick(t) {
-  const ac = ctx();
-  const mg = master();
+function buildReverb(secs, decay, preDelay = 0.02) {
+  const ctx = ac();
+  const conv = ctx.createConvolver();
+  const len = Math.floor(ctx.sampleRate * secs);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  const pre = Math.floor(ctx.sampleRate * preDelay);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      if (i < pre) { d[i] = 0; continue; }
+      const t = (i - pre) / (len - pre);
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay);
+      if (i < pre + ctx.sampleRate * 0.05) d[i] *= 1.4;
+    }
+  }
+  conv.buffer = buf;
+  return conv;
+}
 
-  // Sub-oscillator with pitch drop
-  const osc = ac.createOscillator();
+// ─── FX INIT ────────────────────────────────────────────────────────────────
+
+function initFX() {
+  if (hallReverb) return;
+  const ctx = ac();
+
+  // Long hall reverb for drones/pads (4.5s)
+  hallReverb = buildReverb(4.5, 1.4, 0.035);
+  hallWet = ctx.createGain();
+  hallWet.gain.value = 0.62;
+  hallReverb.connect(hallWet);
+  hallWet.connect(mg());
+
+  // Shorter room reverb for texture/shimmer (1.8s)
+  roomReverb = buildReverb(1.8, 2.4, 0.01);
+  roomWet = ctx.createGain();
+  roomWet.gain.value = 0.35;
+  roomReverb.connect(roomWet);
+  roomWet.connect(mg());
+
+  // Quarter-note delay for lead
+  delayNode = ctx.createDelay(2.0);
+  delayNode.delayTime.value = 60 / bpm;
+
+  delayFeedback = ctx.createGain();
+  delayFeedback.gain.value = 0.44;
+
+  const delayTone = ctx.createBiquadFilter();
+  delayTone.type = 'lowpass';
+  delayTone.frequency.value = 2800;
+
+  delayNode.connect(delayTone);
+  delayTone.connect(delayFeedback);
+  delayFeedback.connect(delayNode);
+
+  const delayToReverb = ctx.createGain();
+  delayToReverb.gain.value = 0.4;
+  delayNode.connect(delayToReverb);
+  delayToReverb.connect(hallReverb);
+
+  const delayToMaster = ctx.createGain();
+  delayToMaster.gain.value = 0.38;
+  delayNode.connect(delayToMaster);
+  delayToMaster.connect(mg());
+}
+
+function updateDelayTime() {
+  if (delayNode) delayNode.delayTime.value = 60 / bpm;
+}
+
+// ─── INSTRUMENTS ─────────────────────────────────────────────────────────────
+
+// SUB — deep sine drone, slow attack
+const SUB_FREQS = [40, 55, 65.41, 55, 40, 73.42];
+let subIdx = 0;
+
+function playSub(t) {
+  const ctx = ac(); initFX();
+  const freq = SUB_FREQS[subIdx++ % SUB_FREQS.length];
+
+  const osc = ctx.createOscillator();
   osc.type = 'sine';
-  osc.frequency.setValueAtTime(170, t);
-  osc.frequency.exponentialRampToValueAtTime(38, t + 0.38);
+  osc.frequency.value = freq;
 
-  const g = ac.createGain();
-  g.gain.setValueAtTime(1.1, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.48);
+  // Slight pitch waver via LFO
+  const lfo = ctx.createOscillator();
+  lfo.type = 'sine'; lfo.frequency.value = 0.08;
+  const lfoG = ctx.createGain(); lfoG.gain.value = 0.4;
+  lfo.connect(lfoG); lfoG.connect(osc.frequency);
 
-  osc.connect(g);
-  g.connect(mg);
-  osc.start(t);
-  osc.stop(t + 0.52);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.001, t);
+  g.gain.linearRampToValueAtTime(0.7, t + 0.18);
+  g.gain.setValueAtTime(0.7, t + 0.25);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 2.8);
 
-  // Click transient
-  const click = ac.createOscillator();
-  click.type = 'sine';
-  click.frequency.setValueAtTime(1000, t);
-  click.frequency.exponentialRampToValueAtTime(80, t + 0.018);
+  osc.connect(g); g.connect(mg());
 
-  const cg = ac.createGain();
-  cg.gain.setValueAtTime(0.7, t);
-  cg.gain.exponentialRampToValueAtTime(0.001, t + 0.025);
+  // Tiny reverb send for depth
+  const rs = ctx.createGain(); rs.gain.value = 0.12;
+  g.connect(rs); rs.connect(hallReverb);
 
-  click.connect(cg);
-  cg.connect(mg);
-  click.start(t);
-  click.stop(t + 0.03);
-
-  // Noise body
-  const ns = ac.createBufferSource();
-  ns.buffer = getNoiseBuffer();
-  const nf = ac.createBiquadFilter();
-  nf.type = 'lowpass';
-  nf.frequency.value = 220;
-  const ng = ac.createGain();
-  ng.gain.setValueAtTime(0.22, t);
-  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
-  ns.connect(nf); nf.connect(ng); ng.connect(mg);
-  ns.start(t); ns.stop(t + 0.1);
+  lfo.start(t); osc.start(t);
+  lfo.stop(t + 3.2); osc.stop(t + 3.2);
 }
 
-function playSnare(t) {
-  const ac = ctx();
-  const mg = master();
+// DRONE — cluster of detuned triangle oscillators
+const DRONE_FREQS = [110, 138.59, 146.83, 110, 123.47, 164.81];
+let droneIdx = 0;
 
-  // Noise
-  const ns = ac.createBufferSource();
-  ns.buffer = getNoiseBuffer();
-  const nf = ac.createBiquadFilter();
-  nf.type = 'bandpass';
-  nf.frequency.value = 3200;
-  nf.Q.value = 0.6;
-  const ng = ac.createGain();
-  ng.gain.setValueAtTime(0.9, t);
-  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.19);
-  ns.connect(nf); nf.connect(ng); ng.connect(mg);
-  ns.start(t); ns.stop(t + 0.22);
+function playDrone(t) {
+  const ctx = ac(); initFX();
+  const base = DRONE_FREQS[droneIdx++ % DRONE_FREQS.length];
 
-  // Tone
-  const osc = ac.createOscillator();
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(210, t);
-  osc.frequency.exponentialRampToValueAtTime(105, t + 0.09);
-  const og = ac.createGain();
-  og.gain.setValueAtTime(0.65, t);
-  og.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-  osc.connect(og); og.connect(mg);
-  osc.start(t); osc.stop(t + 0.14);
-}
+  // 4 detuned oscillators for a thick drone
+  [0, 3.5, -2.8, 7].forEach((cents, i) => {
+    const freq = base * Math.pow(2, cents / 1200);
 
-function playClap(t) {
-  const ac = ctx();
-  const mg = master();
+    const osc = ctx.createOscillator();
+    osc.type = i % 2 === 0 ? 'triangle' : 'sine';
+    osc.frequency.value = freq;
 
-  [0, 0.008, 0.018, 0.03].forEach((dt, i) => {
-    const ns = ac.createBufferSource();
-    ns.buffer = getNoiseBuffer();
-    const f = ac.createBiquadFilter();
-    f.type = 'bandpass';
-    f.frequency.value = 1300 + i * 300;
-    f.Q.value = 0.8;
-    const g = ac.createGain();
-    const vel = i === 3 ? 0.85 : 0.38;
-    g.gain.setValueAtTime(vel, t + dt);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dt + (i === 3 ? 0.14 : 0.04));
-    ns.connect(f); f.connect(g); g.connect(mg);
-    ns.start(t + dt); ns.stop(t + dt + 0.18);
+    const g = ctx.createGain();
+    const vol = 0.22 - i * 0.03;
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.25);
+    g.gain.setValueAtTime(vol, t + 0.5);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 3.5);
+
+    osc.connect(g);
+
+    const dry = ctx.createGain(); dry.gain.value = 0.25;
+    const rev = ctx.createGain(); rev.gain.value = 0.75;
+    g.connect(dry); dry.connect(mg());
+    g.connect(rev); rev.connect(hallReverb);
+
+    osc.start(t); osc.stop(t + 4.0);
   });
 }
 
-function playHHClosed(t) {
-  const ac = ctx();
-  const mg = master();
+// PAD — slow-attack triangle chord
+const PAD_VOICINGS = [
+  [110, 164.81, 220, 329.63],      // Am — A2 E3 A3 E4 (open 5ths)
+  [130.81, 196, 261.63, 392],      // C  — C3 G3 C4 G4
+  [146.83, 220, 293.66, 440],      // Dm — D3 A3 D4 A4
+  [110, 146.83, 220, 329.63],      // Am11 — A2 D3 A3 E4
+];
+let padIdx = 0;
 
-  // Cut any open HH playing
-  if (openHHNode) {
-    try { openHHNode.gain.setValueAtTime(0, t); } catch(e) {}
-  }
+function playPad(t) {
+  const ctx = ac(); initFX();
+  const chord = PAD_VOICINGS[padIdx++ % PAD_VOICINGS.length];
 
-  const ns = ac.createBufferSource();
-  ns.buffer = getNoiseBuffer();
-  const f = ac.createBiquadFilter();
-  f.type = 'highpass';
-  f.frequency.value = 7500;
-  const g = ac.createGain();
-  g.gain.setValueAtTime(0.75, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.048);
-  ns.connect(f); f.connect(g); g.connect(mg);
-  ns.start(t); ns.stop(t + 0.06);
+  chord.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+
+    // Slow pitch vibrato
+    const vib = ctx.createOscillator();
+    vib.type = 'sine'; vib.frequency.value = 0.22 + i * 0.07;
+    const vibG = ctx.createGain(); vibG.gain.value = 0.7;
+    vib.connect(vibG); vibG.connect(osc.frequency);
+
+    const g = ctx.createGain();
+    const vol = 0.3 - i * 0.04;
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.35);   // slow attack
+    g.gain.setValueAtTime(vol, t + 1.0);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 4.5);
+
+    osc.connect(g);
+    const dry = ctx.createGain(); dry.gain.value = 0.08;
+    const rev = ctx.createGain(); rev.gain.value = 0.92;
+    g.connect(dry); dry.connect(mg());
+    g.connect(rev); rev.connect(hallReverb);
+
+    vib.start(t); osc.start(t);
+    vib.stop(t + 5.0); osc.stop(t + 5.0);
+  });
 }
 
-function playHHOpen(t) {
-  const ac = ctx();
-  const mg = master();
+// LEAD — triangle synth, through echo + hall reverb
+const LEAD_NOTES = [
+  [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 392],  // A pentatonic
+];
+const LEAD_MAP = [0, 2, 4, 3, 5, 3, 6, 4, 1, 5, 2, 6, 3, 4, 7, 0];
 
-  const ns = ac.createBufferSource();
-  ns.buffer = getNoiseBuffer();
+function playLead(t, step) {
+  const ctx = ac(); initFX();
+  const freq = LEAD_NOTES[0][LEAD_MAP[step] % 8];
 
-  const f = ac.createBiquadFilter();
-  f.type = 'highpass';
-  f.frequency.value = 5200;
+  const osc1 = ctx.createOscillator();
+  osc1.type = 'triangle'; osc1.frequency.value = freq;
 
-  const f2 = ac.createBiquadFilter();
-  f2.type = 'peaking';
-  f2.frequency.value = 9000;
-  f2.gain.value = 6;
+  const osc2 = ctx.createOscillator();
+  osc2.type = 'triangle'; osc2.frequency.value = freq * 2.003;
 
-  const g = ac.createGain();
-  g.gain.setValueAtTime(0.6, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+  const osc3 = ctx.createOscillator();
+  osc3.type = 'sine'; osc3.frequency.value = freq * 0.998;
 
-  openHHNode = g;
-  ns.connect(f); f.connect(f2); f2.connect(g); g.connect(mg);
-  ns.start(t); ns.stop(t + 0.38);
+  const filt = ctx.createBiquadFilter();
+  filt.type = 'lowpass';
+  filt.frequency.setValueAtTime(5000, t);
+  filt.frequency.exponentialRampToValueAtTime(1200, t + 0.55);
+  filt.Q.value = 4;
+
+  const o2g = ctx.createGain(); o2g.gain.value = 0.38;
+  const o3g = ctx.createGain(); o3g.gain.value = 0.28;
+
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.001, t);
+  g.gain.linearRampToValueAtTime(0.52, t + 0.014);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+
+  osc1.connect(filt);
+  osc2.connect(o2g); o2g.connect(filt);
+  osc3.connect(o3g); o3g.connect(filt);
+  filt.connect(g);
+
+  const dry = ctx.createGain(); dry.gain.value = 0.14;
+  const echo = ctx.createGain(); echo.gain.value = 0.78;
+  const rev = ctx.createGain(); rev.gain.value = 0.5;
+
+  g.connect(dry); dry.connect(mg());
+  g.connect(echo); echo.connect(delayNode);
+  g.connect(rev); rev.connect(hallReverb);
+
+  osc1.start(t); osc2.start(t); osc3.start(t);
+  osc1.stop(t + 1.1); osc2.stop(t + 1.1); osc3.stop(t + 1.1);
 }
 
-function playTom(t) {
-  const ac = ctx();
-  const mg = master();
+// BELL — FM synthesis, long shimmering tail
+const BELL_FREQS = [523.25, 659.25, 783.99, 987.77, 1046.5, 880, 698.46, 1174.66];
+let bellIdx = 0;
 
-  const osc = ac.createOscillator();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(175, t);
-  osc.frequency.exponentialRampToValueAtTime(65, t + 0.42);
+function playBell(t) {
+  const ctx = ac(); initFX();
+  const freq = BELL_FREQS[bellIdx++ % BELL_FREQS.length];
 
-  const g = ac.createGain();
-  g.gain.setValueAtTime(0.88, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.52);
+  // FM: carrier + inharmonic modulator
+  const mod = ctx.createOscillator();
+  mod.type = 'sine'; mod.frequency.value = freq * 2.756;
 
-  osc.connect(g); g.connect(mg);
-  osc.start(t); osc.stop(t + 0.56);
+  const modG = ctx.createGain();
+  modG.gain.setValueAtTime(freq * 2.5, t);
+  modG.gain.exponentialRampToValueAtTime(freq * 0.04, t + 2.0);
 
-  // Attack transient
-  const att = ac.createOscillator();
-  att.type = 'sine';
-  att.frequency.setValueAtTime(400, t);
-  att.frequency.exponentialRampToValueAtTime(175, t + 0.025);
-  const ag = ac.createGain();
-  ag.gain.setValueAtTime(0.3, t);
-  ag.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
-  att.connect(ag); ag.connect(mg);
-  att.start(t); att.stop(t + 0.04);
+  const carrier = ctx.createOscillator();
+  carrier.type = 'sine'; carrier.frequency.value = freq;
+
+  mod.connect(modG); modG.connect(carrier.frequency);
+
+  // Second partial (octave, softer)
+  const carrier2 = ctx.createOscillator();
+  carrier2.type = 'sine'; carrier2.frequency.value = freq * 2;
+
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.001, t);
+  g.gain.linearRampToValueAtTime(0.22, t + 0.003);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 4.5);
+
+  const g2 = ctx.createGain(); g2.gain.value = 0.09;
+  g2.gain.setValueAtTime(0.09, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 2.5);
+
+  carrier.connect(g);
+  carrier2.connect(g2);
+
+  const dry = ctx.createGain(); dry.gain.value = 0.04;
+  const rev = ctx.createGain(); rev.gain.value = 0.94;
+  g.connect(dry); g2.connect(dry); dry.connect(mg());
+  g.connect(rev); g2.connect(rev); rev.connect(hallReverb);
+
+  mod.start(t); carrier.start(t); carrier2.start(t);
+  mod.stop(t + 5.0); carrier.stop(t + 5.0); carrier2.stop(t + 5.0);
 }
 
-// Bass notes: pentatonic pattern
-const BASS_NOTES = [55, 73.42, 82.41, 110, 55, 65.41, 87.31, 98];
-let bassIdx = 0;
+// TEXTURE — bandpass-filtered noise, slowly animated
+let textureIdx = 0;
 
-function playBass(t) {
-  const ac = ctx();
-  const mg = master();
-  const freq = BASS_NOTES[bassIdx % BASS_NOTES.length];
-  bassIdx++;
+function playTexture(t) {
+  const ctx = ac(); initFX();
+  const freqs = [300, 500, 800, 1200, 600, 900];
+  const cf = freqs[textureIdx++ % freqs.length];
 
-  const osc = ac.createOscillator();
-  osc.type = 'sawtooth';
-  osc.frequency.value = freq;
+  const ns = ctx.createBufferSource();
+  ns.buffer = getNoise();
 
-  // Sub-oscillator
-  const sub = ac.createOscillator();
-  sub.type = 'sine';
-  sub.frequency.value = freq;
+  const f = ctx.createBiquadFilter();
+  f.type = 'bandpass'; f.frequency.value = cf; f.Q.value = 3.5;
 
-  const filter = ac.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(1800, t);
-  filter.frequency.exponentialRampToValueAtTime(320, t + 0.28);
-  filter.Q.value = 7;
+  // Slow amplitude tremolo
+  const lfo = ctx.createOscillator();
+  lfo.type = 'sine'; lfo.frequency.value = 0.5;
+  const lfoG = ctx.createGain(); lfoG.gain.value = 0.15;
+  lfo.connect(lfoG);
 
-  const g = ac.createGain();
-  g.gain.setValueAtTime(0.48, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.001, t);
+  g.gain.linearRampToValueAtTime(0.28, t + 0.12);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 1.6);
+  lfoG.connect(g.gain);
 
-  const sg = ac.createGain();
-  sg.gain.value = 0.35;
+  ns.connect(f); f.connect(g);
 
-  osc.connect(filter); sub.connect(sg); sg.connect(filter);
-  filter.connect(g); g.connect(mg);
+  const dry = ctx.createGain(); dry.gain.value = 0.3;
+  const rev = ctx.createGain(); rev.gain.value = 0.7;
+  g.connect(dry); dry.connect(mg());
+  g.connect(rev); rev.connect(roomReverb);
 
-  osc.start(t); sub.start(t);
-  osc.stop(t + 0.42); sub.stop(t + 0.42);
+  lfo.start(t); ns.start(t);
+  lfo.stop(t + 2.0); ns.stop(t + 2.0);
 }
 
-function playSound(id, t) {
+// SHIMMER — high-frequency crystalline sine cluster
+const SHIMMER_FREQS = [2093, 2637, 3136, 3520, 4186, 2794];
+let shimmerIdx = 0;
+
+function playShimmer(t) {
+  const ctx = ac(); initFX();
+  const base = SHIMMER_FREQS[shimmerIdx++ % SHIMMER_FREQS.length];
+
+  [0, 4, -3, 7, -6].forEach((cents, i) => {
+    const freq = base * Math.pow(2, cents / 1200);
+    const osc = ctx.createOscillator();
+    osc.type = 'sine'; osc.frequency.value = freq;
+
+    const g = ctx.createGain();
+    const vol = 0.09 - i * 0.012;
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+
+    osc.connect(g);
+    const rev = ctx.createGain(); rev.gain.value = 0.98;
+    g.connect(rev); rev.connect(hallReverb);
+
+    osc.start(t); osc.stop(t + 2.2);
+  });
+}
+
+// SWEEP — rising bandpass filter sweep through noise
+function playSweep(t) {
+  const ctx = ac(); initFX();
+
+  const ns = ctx.createBufferSource();
+  ns.buffer = getNoise();
+
+  const f = ctx.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.setValueAtTime(120, t);
+  f.frequency.exponentialRampToValueAtTime(9000, t + 2.2);
+  f.Q.value = 12;
+
+  // Slight pitch resonance extra layer
+  const res = ctx.createBiquadFilter();
+  res.type = 'peaking';
+  res.frequency.setValueAtTime(300, t);
+  res.frequency.exponentialRampToValueAtTime(5000, t + 1.8);
+  res.gain.value = 8; res.Q.value = 5;
+
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.001, t);
+  g.gain.linearRampToValueAtTime(0.5, t + 0.6);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 2.8);
+
+  ns.connect(f); f.connect(res); res.connect(g);
+
+  const dry = ctx.createGain(); dry.gain.value = 0.18;
+  const rev = ctx.createGain(); rev.gain.value = 0.82;
+  g.connect(dry); dry.connect(mg());
+  g.connect(rev); rev.connect(hallReverb);
+
+  ns.start(t); ns.stop(t + 3.2);
+}
+
+// ─── DISPATCHER ─────────────────────────────────────────────────────────────
+
+function playSound(id, t, step = 0) {
   if (!soundEnabled) return;
-  const time = t ?? ctx().currentTime + 0.01;
+  const time = t ?? ac().currentTime + 0.01;
   switch (id) {
-    case 'kick':      playKick(time);     break;
-    case 'snare':     playSnare(time);    break;
-    case 'clap':      playClap(time);     break;
-    case 'hh_closed': playHHClosed(time); break;
-    case 'hh_open':   playHHOpen(time);   break;
-    case 'tom':       playTom(time);      break;
-    case 'bass':      playBass(time);     break;
+    case 'sub':     playSub(time);           break;
+    case 'drone':   playDrone(time);         break;
+    case 'pad':     playPad(time);           break;
+    case 'lead':    playLead(time, step);    break;
+    case 'bell':    playBell(time);          break;
+    case 'texture': playTexture(time);       break;
+    case 'shimmer': playShimmer(time);       break;
+    case 'sweep':   playSweep(time);         break;
   }
 }
 
-// ─── SEQUENCER ──────────────────────────────────────────────────────────────
+// ─── SEQUENCER ───────────────────────────────────────────────────────────────
 
 const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD = 0.08;
 
 function scheduleAhead() {
-  const ac = ctx();
-  while (nextNoteTime < ac.currentTime + SCHEDULE_AHEAD) {
+  const ctx = ac();
+  while (nextNoteTime < ctx.currentTime + SCHEDULE_AHEAD) {
     const step = currentStep;
     TRACKS.forEach(tr => {
-      if (tr.steps[step]) playSound(tr.id, nextNoteTime);
+      if (tr.steps[step]) playSound(tr.id, nextNoteTime, step);
     });
-
-    // Defer visual update to sync with audio
-    const delay = Math.max(0, (nextNoteTime - ac.currentTime) * 1000);
+    const delay = Math.max(0, (nextNoteTime - ctx.currentTime) * 1000);
     setTimeout(() => advanceVisual(step), delay);
-
     nextNoteTime += (60 / bpm) / 4;
     currentStep = (currentStep + 1) % STEPS;
   }
@@ -492,7 +664,7 @@ function startSequencer() {
   if (isPlaying) return;
   isPlaying = true;
   currentStep = 0;
-  nextNoteTime = ctx().currentTime + 0.04;
+  nextNoteTime = ac().currentTime + 0.04;
   scheduleAhead();
   document.getElementById('btn-play').textContent = 'Stop';
 }
@@ -505,12 +677,11 @@ function stopSequencer() {
   clearPlayhead();
 }
 
-// ─── VISUAL UPDATES ─────────────────────────────────────────────────────────
+// ─── VISUAL ──────────────────────────────────────────────────────────────────
 
 let lastStep = -1;
 
 function advanceVisual(step) {
-  // Clear previous
   if (lastStep >= 0) {
     document.querySelectorAll(`.dot[data-step="${lastStep}"]`).forEach(d => {
       d.classList.remove('beat', 'col-active');
@@ -518,19 +689,15 @@ function advanceVisual(step) {
     const prev = document.getElementById(`ph-${lastStep}`);
     if (prev) prev.classList.remove('active');
   }
-
-  // Activate current
   document.querySelectorAll(`.dot[data-step="${step}"]`).forEach(d => {
     d.classList.add('col-active');
     if (d.classList.contains('active')) {
       d.classList.add('beat');
-      setTimeout(() => d.classList.remove('beat'), 90);
+      setTimeout(() => d.classList.remove('beat'), 100);
     }
   });
-
   const ph = document.getElementById(`ph-${step}`);
   if (ph) ph.classList.add('active');
-
   lastStep = step;
 }
 
@@ -545,75 +712,97 @@ function clearPlayhead() {
   }
 }
 
-// ─── BUILD UI ───────────────────────────────────────────────────────────────
+// ─── DRAG PAINT ──────────────────────────────────────────────────────────────
 
-function buildPlayhead() {
-  const wrap = document.getElementById('playhead');
-  wrap.innerHTML = '';
-  for (let s = 0; s < STEPS; s++) {
-    const c = document.createElement('div');
-    c.className = 'ph-cell';
-    c.id = `ph-${s}`;
-    wrap.appendChild(c);
-  }
+let isDragging = false;
+let dragState = false; // true = painting on, false = painting off
+
+function applyDot(dot) {
+  const ti = +dot.dataset.track;
+  const si = +dot.dataset.step;
+  const track = TRACKS[ti];
+  const current = track.steps[si];
+  if (current === dragState) return; // already correct state, skip
+  track.steps[si] = dragState;
+  dot.classList.toggle('active', dragState);
+  dot.style.background = dragState ? track.gradient : '';
+  if (dragState && soundEnabled) { ac(); playSound(track.id, null, si); }
 }
+
+window.addEventListener('mouseup', () => { isDragging = false; });
+window.addEventListener('dragstart', e => e.preventDefault());
+
+// ─── BUILD UI ────────────────────────────────────────────────────────────────
 
 function buildGrid() {
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
-
   TRACKS.forEach((track, ti) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'row-wrap';
+
     const row = document.createElement('div');
     row.className = 'row';
-
     track.steps.forEach((on, si) => {
       const dot = document.createElement('div');
       dot.className = 'dot' + (on ? ' active' : '');
       dot.dataset.track = ti;
       dot.dataset.step = si;
       if (on) dot.style.background = track.gradient;
-
-      dot.addEventListener('click', () => {
-        track.steps[si] = !track.steps[si];
-        const isOn = track.steps[si];
-        dot.classList.toggle('active', isOn);
-        dot.style.background = isOn ? track.gradient : '';
-
-        if (isOn && soundEnabled) {
-          ctx(); // wake audio context
-          playSound(track.id);
-        }
+      dot.addEventListener('mousedown', e => {
+        e.preventDefault();
+        isDragging = true;
+        dragState = !track.steps[si]; // set direction from first dot
+        applyDot(dot);
       });
-
+      dot.addEventListener('mouseover', () => {
+        if (isDragging) applyDot(dot);
+      });
       row.appendChild(dot);
     });
 
-    grid.appendChild(row);
+    wrap.appendChild(row);
+    grid.appendChild(wrap);
   });
 }
 
-// ─── CONTROLS ───────────────────────────────────────────────────────────────
+// ─── CONTROLS ────────────────────────────────────────────────────────────────
 
-// Play / Stop
 document.getElementById('btn-play').addEventListener('click', () => {
   if (isPlaying) stopSequencer(); else startSequencer();
 });
 
-// Sound toggle
 document.getElementById('btn-sound').addEventListener('click', () => {
   soundEnabled = !soundEnabled;
   document.getElementById('btn-sound').textContent = `Sound • ${soundEnabled ? 'On' : 'Off'}`;
-  if (soundEnabled) ctx();
+  if (soundEnabled) ac();
 });
 
-// Clear
 document.getElementById('btn-clear').addEventListener('click', () => {
   TRACKS.forEach(t => t.steps.fill(false));
-  bassIdx = 0;
+  subIdx = droneIdx = padIdx = bellIdx = textureIdx = shimmerIdx = 0;
   buildGrid();
 });
 
-// BPM: drag left/right to change
+document.getElementById('btn-randomise').addEventListener('click', () => {
+  const prob = {
+    sub:     [0.80,0.05,0.10,0.05, 0.70,0.05,0.10,0.05, 0.75,0.05,0.10,0.05, 0.65,0.05,0.10,0.05],
+    drone:   [0.65,0.05,0.20,0.35, 0.05,0.25,0.45,0.05, 0.55,0.10,0.25,0.40, 0.05,0.30,0.20,0.10],
+    pad:     [0.55,0.05,0.05,0.05, 0.05,0.05,0.05,0.05, 0.40,0.05,0.05,0.05, 0.25,0.05,0.05,0.05],
+    lead:    [0.30,0.05,0.25,0.05, 0.10,0.05,0.30,0.05, 0.15,0.30,0.05,0.15, 0.05,0.10,0.25,0.05],
+    bell:    [0.05,0.05,0.05,0.05, 0.40,0.05,0.05,0.10, 0.05,0.05,0.05,0.05, 0.40,0.05,0.05,0.10],
+    texture: [0.70,0.15,0.65,0.15, 0.60,0.20,0.60,0.20, 0.65,0.15,0.60,0.20, 0.65,0.15,0.55,0.25],
+    shimmer: [0.05,0.05,0.05,0.35, 0.05,0.05,0.05,0.05, 0.05,0.05,0.05,0.35, 0.05,0.05,0.05,0.05],
+    sweep:   [0.45,0.05,0.05,0.05, 0.05,0.05,0.05,0.05, 0.25,0.05,0.05,0.05, 0.05,0.05,0.05,0.05],
+  };
+  TRACKS.forEach(t => {
+    const p = prob[t.id];
+    t.steps = t.steps.map((_, i) => Math.random() < p[i]);
+  });
+  subIdx = droneIdx = padIdx = bellIdx = textureIdx = shimmerIdx = 0;
+  buildGrid();
+});
+
 let bpmDrag = null;
 const bpmBtn = document.getElementById('btn-bpm');
 
@@ -625,21 +814,22 @@ bpmBtn.addEventListener('mousedown', e => {
 window.addEventListener('mousemove', e => {
   if (!bpmDrag) return;
   const delta = Math.round((e.clientX - bpmDrag.startX) / 3);
-  bpm = Math.min(220, Math.max(50, bpmDrag.startBpm + delta));
+  bpm = Math.min(160, Math.max(40, bpmDrag.startBpm + delta));
   bpmBtn.textContent = `BPM • ${bpm}`;
+  updateDelayTime();
 });
 
 window.addEventListener('mouseup', () => { bpmDrag = null; });
 
 bpmBtn.addEventListener('dblclick', () => {
-  const v = prompt('BPM (50–220):', bpm);
+  const v = prompt('BPM (40–160):', bpm);
   if (v !== null && !isNaN(v)) {
-    bpm = Math.min(220, Math.max(50, Math.round(+v)));
+    bpm = Math.min(160, Math.max(40, Math.round(+v)));
     bpmBtn.textContent = `BPM • ${bpm}`;
+    updateDelayTime();
   }
 });
 
-// Space to play/stop
 window.addEventListener('keydown', e => {
   if (e.code === 'Space' && e.target === document.body) {
     e.preventDefault();
@@ -649,7 +839,6 @@ window.addEventListener('keydown', e => {
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 
-buildPlayhead();
 buildGrid();
 </script>
 </body>
